@@ -49,6 +49,7 @@ class MolT5(TextBasedMoleculeEditingModel, MoleculeCaptioningModel, TextGuidedMo
             labels=label.input_ids
         ).loss}
 
+    @torch.no_grad()
     def predict_text_based_molecule_editing(self, 
         molecule: Featurized[Molecule], 
         text: Featurized[Text],
@@ -76,6 +77,7 @@ class MolT5(TextBasedMoleculeEditingModel, MoleculeCaptioningModel, TextGuidedMo
             labels=label.input_ids
         ).loss}
 
+    @torch.no_grad()
     def predict_molecule_captioning(self, 
         molecule: Featurized[Molecule], 
     ) -> List[Text]:
@@ -102,6 +104,7 @@ class MolT5(TextBasedMoleculeEditingModel, MoleculeCaptioningModel, TextGuidedMo
             labels=label.input_ids
         ).loss}
 
+    @torch.no_grad()
     def predict_text_guided_molecule_generation(self, 
         text: Featurized[Text], 
     ) -> List[Molecule]:
@@ -128,6 +131,7 @@ class MolT5(TextBasedMoleculeEditingModel, MoleculeCaptioningModel, TextGuidedMo
             labels=label.input_ids
         ).loss}
 
+    @torch.no_grad()
     def predict_molecule_question_answering(self, 
         text: Featurized[Text], 
     ) -> List[Text]:
@@ -154,6 +158,7 @@ class MolT5(TextBasedMoleculeEditingModel, MoleculeCaptioningModel, TextGuidedMo
             labels=label.input_ids
         ).loss}
 
+    @torch.no_grad()
     def predict_protein_question_answering(self, 
         text: Featurized[Text], 
     ) -> List[Text]:

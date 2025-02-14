@@ -36,6 +36,7 @@ class MoleculeQAModel(BaseModel, ABC):
         raise NotImplementedError
 
     @abstractmethod
+    @torch.no_grad()
     def predict_molecule_question_answering(self,
         text: List[Text], 
     ) -> List[Text]:

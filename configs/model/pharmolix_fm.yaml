@@ -1,0 +1,35 @@
+model:
+  name: pharmolix_fm
+  num_node_types: 12
+  num_edge_types: 6
+  pocket_dim: 128
+  pocket_in_dim: 25
+  addition_node_features: ['is_peptide']
+  node_dim: 320
+  edge_dim: 96
+  pos_norm: 6
+  pocket_knn: 32
+  pocket:
+    edge_dim: 32
+    hidden_dim: 128
+    num_blocks: 4
+    dist_cfg:
+      num_gaussians: 32
+  denoiser:
+    hidden_dim: 320
+    num_blocks: 6
+    dist_cfg:
+      stop: 15
+      num_gaussians: 64
+    gate_dim: 2
+    context_cfg:
+      edge_dim: 128
+      knn: 32
+      dist_cfg:
+        stop: 20
+        num_gaussians: 64
+        type_: linear
+  add_output: ['confidence']
+  num_sample_steps: 100
+  sigma1: 0.03
+  beta1: 1.5

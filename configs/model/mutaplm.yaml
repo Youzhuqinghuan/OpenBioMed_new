@@ -1,0 +1,19 @@
+model:
+  name: mutaplm
+  protein_model: ./checkpoints/esm2/650m
+  llama_ckpt: ./checkpoints/biomedgpt-lm
+  num_query_tokens_protein1: 64
+  num_query_tokens_protein2: 64
+  ca_num_head: 8
+  protein_maxlen: 1024
+  text_maxlen: 256
+  func_maxlen: 512
+  system_prompt: You are an expert at biology and life science. Now a user gives you several protein sequences and mutations. Please follow user instructions and answer their questions. Based on the following protein sequence, please describe its function.
+  stage2_prompt: Next is a feature of the mutation {} to {} at position {}. Please generate a short brief text to describe it.
+  text_generation:
+    num_beams: 2
+    max_length: 512
+    min_length: 1
+    repetition_penalty: 1.5
+    length_penalty: 1
+    temperature: 0

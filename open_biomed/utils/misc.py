@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import torch
@@ -14,6 +14,13 @@ def sub_batch_by_interval(start: int, end: int, **kwargs: Dict[str, List[Any]]) 
     for key in kwargs:
         new_batch[key] = kwargs[key][start:end]
     return new_batch
+
+def safe_index(l: List[Any], e: Any) -> int:
+    # Return index of element e in list l. If e is not present, return the last index
+    try:
+        return l.index(e)
+    except:
+        return len(l) - 1
 
 def concatenate_tokens(tokens_to_concat: List[BatchEncoding]) -> BatchEncoding:
     # Concatenate multiple tokenized results by putting the non-padding tokens together

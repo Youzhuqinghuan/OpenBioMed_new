@@ -36,6 +36,7 @@ class ProteinQAModel(BaseModel, ABC):
         raise NotImplementedError
 
     @abstractmethod
+    @torch.no_grad()
     def predict_protein_question_answering(self,
         text: List[Text], 
     ) -> List[Text]:

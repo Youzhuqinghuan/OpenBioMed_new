@@ -4,6 +4,7 @@ from open_biomed.datasets.text_guided_molecule_generation_dataset import CheBI20
 from open_biomed.datasets.molecule_question_answering import MolQA
 from open_biomed.datasets.protein_question_answering import ProteinQA
 
+from open_biomed.datasets.molecule_property_prediction_dataset import MoleculeNet
 
 DATASET_REGISTRY = {
     "text_based_molecule_editing":
@@ -27,4 +28,22 @@ DATASET_REGISTRY = {
         {
             "ProteinQA": ProteinQA
         },
+    "molecule_property_prediction":
+        {
+            "BBBP": MoleculeNet,
+            "Tox21": MoleculeNet,
+            "ClinTox": MoleculeNet,
+            "HIV": MoleculeNet,
+            "Bace": MoleculeNet,
+            "SIDER": MoleculeNet,
+            "MUV": MoleculeNet,
+            "Toxcast": MoleculeNet,
+            # TODO: 以下是回归任务
+            "FreeSolv": MoleculeNet,
+            "ESOL": MoleculeNet,
+            "Lipo": MoleculeNet,
+            "qm7": MoleculeNet,
+            "qm8": MoleculeNet,
+            "qm9": MoleculeNet
+        }
 }

@@ -50,6 +50,7 @@ class BioT5(TextBasedMoleculeEditingModel, MoleculeCaptioningModel, TextGuidedMo
             labels=label.input_ids
         ).loss}
 
+    @torch.no_grad()
     def predict_text_based_molecule_editing(self, 
         molecule: Featurized[Molecule], 
         text: Featurized[Text],
@@ -77,6 +78,7 @@ class BioT5(TextBasedMoleculeEditingModel, MoleculeCaptioningModel, TextGuidedMo
             labels=label.input_ids
         ).loss}
 
+    @torch.no_grad()
     def predict_molecule_captioning(self, 
         molecule: Featurized[Molecule], 
     ) -> List[Text]:
@@ -103,6 +105,7 @@ class BioT5(TextBasedMoleculeEditingModel, MoleculeCaptioningModel, TextGuidedMo
             labels=label.input_ids
         ).loss}
 
+    @torch.no_grad()
     def predict_text_guided_molecule_generation(self, 
         text: Featurized[Text], 
     ) -> List[Molecule]:

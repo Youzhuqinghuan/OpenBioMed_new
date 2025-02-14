@@ -36,6 +36,7 @@ class MoleculeCaptioningModel(BaseModel, ABC):
         raise NotImplementedError
 
     @abstractmethod
+    @torch.no_grad()
     def predict_molecule_captioning(self,
         molecule: List[Molecule], 
     ) -> List[Text]:

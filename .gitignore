@@ -142,8 +142,10 @@ cython_debug/
 /assets/*
 /checkpoints/**/*
 /datasets/**/*
+/tmp/*
 !/checkpoints/.placeholder
 !/datasets/**/.placeholder
+!/tmp/.placeholder
 
 #files
 *.csv
