@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
-
+import torch
 from transformers import AutoTokenizer, DataCollatorWithPadding
-
 class Collator(ABC):
     def __init__(self) -> None:
         pass
@@ -10,6 +9,82 @@ class Collator(ABC):
     @abstractmethod
     def __call__(self, inputs: List[Any]) -> Any:
         raise NotImplementedError
+
+class MoleculeCollatorWithPadding(Collator):
+    def __init__(self, tokenizer, max_length=512, padding=True, mask=False):
+        """
+        Args:
+            tokenizer (MolEncTokenizer): The tokenizer for molecule sequences.
+            padding (bool): Whether or not to apply padding.
+            mask (bool): Whether or not to apply masking to the sequences.
+        """
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        self.padding = padding
+        self.mask = mask
+
+    def __call__(self, batch: List[Dict]):
+        """
+        Collates a batch of molecule data by applying tokenization, masking, and padding.
+
+        Args:
+            batch (List[Dict]): A list of Dict items where each item contains molecule tokens and smiles.
+
+        Returns:
+            Dict: Collated batch, including padded and masked tokens.
+        """
+        # seq_lengths = [len(item['original_tokens'][0]) for item in batch]
+        # pad_length = min(max(seq_lengths), self.max_length)
+        
+        # all_token_ids = []
+        # all_pad_masks = []
+
+        # for item in batch:
+        #     tokens = item['original_tokens'][0][:self.max_length]
+        #     masks = item['masked_pad_masks'][0][:self.max_length]
+            
+        #     n_pad = pad_length - len(tokens)
+            
+        #     padded_tokens = tokens + [self.tokenizer.pad_token] * n_pad
+        #     padded_masks = masks + [1] * n_pad
+            
+        #     token_ids = self.tokenizer.convert_tokens_to_ids(padded_tokens)
+        #     all_token_ids.append(token_ids)
+        #     all_pad_masks.append(padded_masks)
+
+        # token_ids_tensor = torch.cat(all_token_ids, dim=1)
+        # pad_mask_tensor = torch.cat(all_pad_masks, dim=1)
+        # print(token_ids_tensor.shape, pad_mask_tensor.shape)
+        # exit(0)
+        # return {
+        #     "encoder_input": token_ids_tensor,
+        #     "encoder_pad_mask": pad_mask_tensor
+        # }
+        
+        pad_length = max([len(seq) for item in batch for seq in item['original_tokens']])
+        for item in batch:
+            for i in range(len(item['original_tokens'])):
+                n_pad = pad_length - len(item['original_tokens'][i])
+                item['original_tokens'][i] += [self.tokenizer.pad_token] * n_pad
+                item['masked_pad_masks'][i] += [1] * n_pad
+        
+        all_token_ids = []
+        all_pad_masks = []
+        
+        for item in batch:
+            token_ids = torch.tensor(self.tokenizer.convert_tokens_to_ids(item['original_tokens'])).T
+            pad_mask = torch.tensor(item['masked_pad_masks']).bool().T
+            token_ids = token_ids[:self.max_length]
+            pad_mask = pad_mask[:self.max_length]
+            all_token_ids.append(token_ids)
+            all_pad_masks.append(pad_mask)
+        token_ids_tensor = torch.cat(all_token_ids, dim=1)
+        pad_mask_tensor = torch.cat(all_pad_masks, dim=1)
+        return {
+            "encoder_input": token_ids_tensor,
+            "encoder_pad_mask": pad_mask_tensor
+        }
+
 
 class EnsembleCollator(Collator):
     def __init__(self, to_ensemble: Dict[str, Collator]) -> None:

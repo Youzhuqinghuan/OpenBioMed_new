@@ -8,7 +8,8 @@ from open_biomed.datasets.protein_question_answering import ProteinQA
 DATASET_REGISTRY = {
     "text_based_molecule_editing":
         {
-            "fs_mol_edit": FSMolEdit,   
+            "fs_mol_edit": FSMolEdit,  
+            "fs_mol_multi": FSMolEdit 
         },
     "molecule_captioning":
         {

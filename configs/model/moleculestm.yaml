@@ -1,0 +1,28 @@
+model:
+  name: moleculestm
+  scibert_path: ./checkpoints/moleculestm/scibert
+  MoleculeSTM_model_dir: ./checkpoints/moleculestm/demo_checkpoints_SMILES
+  language_edit_model_dir: ./checkpoints/moleculestm/demo_checkpoints_SMILES
+  vocab_path: ./checkpoints/moleculestm/megamolbart/bart_vocab.txt
+  MegaMolBART_generation_model_dir: ./checkpoints/moleculestm/megamolbart/checkpoints
+  MoleculeSTM_molecule_type: SMILES
+  SSL_emb_dim: 256
+  smiles_max_length: 512
+  text_max_length: 512
+  batch_size_train: 64
+  batch_size_eval: 64
+  predict:
+    num_beams: 2
+    max_length: 512
+
+dataset:
+  batch_size_train: 64
+  batch_size_eval: 64
+
+train:
+  max_epochs: 10
+  batch_size: 64
+  ckpt_freq: 2
+
+evaluation:
+  batch_size: 64

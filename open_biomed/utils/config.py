@@ -25,6 +25,10 @@ class Struct:
 
     def __getitem__(self, index):
         return self.__dict__[index]
+    
+    def save2yaml(self, path):
+        with open(path, "w") as f:
+            yaml.dump(self.todict(), f, default_flow_style=False)
 
 
 class Config:

@@ -66,6 +66,43 @@ class MoleculeTransformersFeaturizer(MoleculeFeaturizer):
             truncation=True, 
             add_special_tokens=self.add_special_tokens,
         )
+        
+# class MoleculeBatch:
+#     def __init__(self, tokens=None, encoder_input=None, smiles=None):
+#         self.tokens = tokens
+#         self.encoder_input = encoder_input
+#         self.smiles = smiles
+        
+class MolMoleculeSTMFeaturizer(MoleculeFeaturizer):
+    def __init__(self,
+        tokenizer: Any,
+        max_length: int=512,
+        add_special_tokens: bool=True,
+        base: str='SMILES',
+    ) -> None:
+        super().__init__()
+        self.tokenizer = tokenizer
+        self.add_special_tokens = add_special_tokens
+        self.base = base
+        if base not in "SMILES" and "SELFIES":
+            raise ValueError("{base} is not a valid 1D representaiton of molecules!")
+
+    def __call__(self, molecule: Molecule) -> BatchEncoding:
+        if self.base == "SMILES":
+            molecule._add_smiles()
+            parse_str = molecule.smiles
+        if self.base == "SELFIES":
+            molecule._add_selfies()
+            parse_str = molecule.selfies
+        return self.tokenizer.tokenize(
+            [parse_str], # Only one str in each call
+            pad=True
+        )
+        # tokens = self.tokenizer.tokenize(
+        #     [parse_str], # Only one str in each call
+        #     pad=True
+        # )
+        # return MoleculeBatch(tokens=tokens, smiles=molecule.smiles)
 
 class TextFeaturizer(Featurizer):
     def __init__(self) -> None:
@@ -91,6 +128,25 @@ class TextTransformersFeaturizer(TextFeaturizer):
     def __call__(self, text: Text) -> BatchEncoding:
         return self.tokenizer(
             text.str, 
+            truncation=True, 
+            add_special_tokens=self.add_special_tokens,
+        )
+
+class TextMoleculeSTMFeaturizer(TextFeaturizer):
+    def __init__(self, 
+        tokenizer: Any,
+        max_length: int=512,
+        add_special_tokens: bool=True,
+    ) -> None:
+        super().__init__()
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        self.add_special_tokens = add_special_tokens
+
+    def __call__(self, text: Text) -> BatchEncoding:
+        return self.tokenizer(
+            text.str, 
+            max_length=self.max_length,
             truncation=True, 
             add_special_tokens=self.add_special_tokens,
         )

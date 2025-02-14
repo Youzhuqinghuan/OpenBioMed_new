@@ -12,7 +12,7 @@ dataset:
   batch_size_eval: 64
 
 train:
-  max_epochs: 2
+  max_epochs: 10
   batch_size: 64
   ckpt_freq: 2
 
