@@ -11,6 +11,7 @@ model:
   text_max_length: 512
   batch_size_train: 64
   batch_size_eval: 64
+  device: cuda:0
   predict:
     num_beams: 2
     max_length: 512
@@ -22,7 +23,7 @@ dataset:
 train:
   max_epochs: 10
   batch_size: 64
-  ckpt_freq: 2
+  ckpt_freq: 3
 
 evaluation:
   batch_size: 64

@@ -5,7 +5,6 @@ import os
 import sys
 import numpy as np
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
 from functools import wraps
 import torch
 from transformers import AutoTokenizer, BatchEncoding
@@ -68,11 +67,6 @@ class MoleculeTransformersFeaturizer(MoleculeFeaturizer):
             add_special_tokens=self.add_special_tokens,
         )
         
-# class MoleculeBatch:
-#     def __init__(self, tokens=None, encoder_input=None, smiles=None):
-#         self.tokens = tokens
-#         self.encoder_input = encoder_input
-#         self.smiles = smiles
         
 class MolMoleculeSTMFeaturizer(MoleculeFeaturizer):
     def __init__(self,
@@ -99,11 +93,7 @@ class MolMoleculeSTMFeaturizer(MoleculeFeaturizer):
             [parse_str], # Only one str in each call
             pad=True
         )
-        # tokens = self.tokenizer.tokenize(
-        #     [parse_str], # Only one str in each call
-        #     pad=True
-        # )
-        # return MoleculeBatch(tokens=tokens, smiles=molecule.smiles)
+
 
 class TextFeaturizer(Featurizer):
     def __init__(self) -> None:
@@ -151,6 +141,7 @@ class TextMoleculeSTMFeaturizer(TextFeaturizer):
             truncation=True, 
             add_special_tokens=self.add_special_tokens,
         )
+        
 class PocketFeaturizer(Featurizer):
     def __init__(self) -> None:
         super().__init__()

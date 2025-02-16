@@ -11,6 +11,14 @@ class Collator(ABC):
     @abstractmethod
     def __call__(self, inputs: List[Any]) -> Any:
         raise NotImplementedError
+    
+    def _collate_single(self, data):
+        if isinstance(data[0], Data):
+            return Batch.from_data_list(data)
+        elif torch.is_tensor(data[0]):
+            return torch.stack([x.squeeze() for x in data])
+        elif isinstance(data[0], int):
+            return torch.tensor(data).view((-1, 1))
 
 class MoleculeCollatorWithPadding(Collator):
     def __init__(self, tokenizer, max_length=512, padding=True, mask=False):
@@ -34,35 +42,7 @@ class MoleculeCollatorWithPadding(Collator):
 
         Returns:
             Dict: Collated batch, including padded and masked tokens.
-        """
-        # seq_lengths = [len(item['original_tokens'][0]) for item in batch]
-        # pad_length = min(max(seq_lengths), self.max_length)
-        
-        # all_token_ids = []
-        # all_pad_masks = []
-
-        # for item in batch:
-        #     tokens = item['original_tokens'][0][:self.max_length]
-        #     masks = item['masked_pad_masks'][0][:self.max_length]
-            
-        #     n_pad = pad_length - len(tokens)
-            
-        #     padded_tokens = tokens + [self.tokenizer.pad_token] * n_pad
-        #     padded_masks = masks + [1] * n_pad
-            
-        #     token_ids = self.tokenizer.convert_tokens_to_ids(padded_tokens)
-        #     all_token_ids.append(token_ids)
-        #     all_pad_masks.append(padded_masks)
-
-        # token_ids_tensor = torch.cat(all_token_ids, dim=1)
-        # pad_mask_tensor = torch.cat(all_pad_masks, dim=1)
-        # print(token_ids_tensor.shape, pad_mask_tensor.shape)
-        # exit(0)
-        # return {
-        #     "encoder_input": token_ids_tensor,
-        #     "encoder_pad_mask": pad_mask_tensor
-        # }
-        
+        """       
         pad_length = max([len(seq) for item in batch for seq in item['original_tokens']])
         for item in batch:
             for i in range(len(item['original_tokens'])):
@@ -86,13 +66,6 @@ class MoleculeCollatorWithPadding(Collator):
             "encoder_input": token_ids_tensor,
             "encoder_pad_mask": pad_mask_tensor
         }
-    def _collate_single(self, data):
-        if isinstance(data[0], Data):
-            return Batch.from_data_list(data)
-        elif torch.is_tensor(data[0]):
-            return torch.stack([x.squeeze() for x in data])
-        elif isinstance(data[0], int):
-            return torch.tensor(data).view((-1, 1))
 
 class PygCollator(Collator):
     def __init__(self, follow_batch: List[str]=[], exclude_keys: List[str]=[]) -> None:

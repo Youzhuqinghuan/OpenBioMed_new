@@ -2,6 +2,10 @@ from abc import ABC, abstractmethod
 from typing import Union
 from typing_extensions import Any
 
+import os
+os.environ['TRANSFORMERS_NO_ADVISORY_WARNINGS'] = 'true'
+import warnings
+warnings.filterwarnings('ignore')
 import argparse
 # from absl import logging
 import datetime
@@ -89,7 +93,7 @@ class TrainValPipeline(Pipeline):
         # Dataset config
         parser.add_argument("--dataset_name", type=str)
         parser.add_argument("--dataset_path", type=str)
-        parser.add_argument("--num_workers", type=int, default=1)
+        parser.add_argument("--num_workers", type=int, default=64)
 
         # Train & Val params
         parser.add_argument("--batch_size_train", type=int, default=8)
