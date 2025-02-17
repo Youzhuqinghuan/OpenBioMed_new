@@ -92,15 +92,15 @@ class MoleculeSTM(TextBasedMoleculeEditingModel):
         self.foundation2generation = self.foundation2generation.to(self.device)
         self.fusion = FeatureFusionModule(
             emb_dim=model_cfg.SSL_emb_dim,
-            n_layers=1,
-            n_heads=4,
+            n_layers=model_cfg.fusion_n_layer,
+            n_heads=model_cfg.fusion_n_head,
             max_seq_len=model_cfg.smiles_max_length
         ).to(self.device)
         
         for param in self.text_model.parameters():
             param.requires_grad = False
-        for param in self.molecule_model.parameters():
-            param.requires_grad = False
+        # for param in self.molecule_model.parameters():
+        #     param.requires_grad = False
         for param in self.text2latent.parameters():
             param.requires_grad = False
         for param in self.mol2latent.parameters():
@@ -181,7 +181,7 @@ class MoleculeSTM(TextBasedMoleculeEditingModel):
         molecule_pad_mask = molecule['encoder_pad_mask']
         _, batch_size = molecule['encoder_input'].shape
 
-        fused_repr = self.fusion(text_repr, molecule_output, molecule_pad_mask)
+        fused_repr = self.fusion(text_repr, molecule_output, molecule_pad_mask) # [seq_len, batch_size, emb_size(256)]
 
         regenerate_mols = self.MegaMolBART_wrapper.inverse_transform(
             fused_repr.to(device), 
@@ -252,4 +252,4 @@ class FeatureFusionModule(nn.Module):
         
         return fused_mol
     
-# bash scripts/train.sh text_based_molecule_editing moleculestm fs_mol_edit 0
+# bash scripts/train.sh text_based_molecule_editing moleculestm fs_mol_edit 0 > /data/hucp/output.log 2>&1

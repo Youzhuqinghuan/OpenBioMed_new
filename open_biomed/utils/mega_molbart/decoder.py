@@ -123,17 +123,17 @@ class DecodeSampler:
         Returns:
             (List[List[str]], List[List[float]]): Tuple of (molecules, their log likelihoods)
         """
-
+        # print('beam decode begin!')
         # Create tensors which will be reused
         token_ids = [self.begin_token_id] + ([self.pad_token_id] * (self.max_seq_len - 1))
         token_ids = [token_ids] * batch_size
         token_ids = torch.tensor(token_ids, device=device).transpose(0, 1)
         pad_mask = torch.zeros((self.max_seq_len, batch_size), device=device, dtype=torch.bool)
-
+        # print(f'token_ids shape: {token_ids.shape} | pad_mask shape: {pad_mask.shape}')
         ts = token_ids[:1, :]
         ms = pad_mask[:1, :]
         ll = torch.zeros((batch_size))
-
+        # print(f'ts shape: {ts.shape} | ms shape: {ms.shape} | ll shape: {ll.shape}')
         # Apply starting token to model to get a distribution over next tokens
         first_lls = self._beam_step(decode_fn, ts, ms, ll)
         top_lls, top_idxs = torch.topk(first_lls, k, dim=1)
@@ -267,7 +267,7 @@ class DecodeSampler:
         Returns:
             seq_lls (torch.Tensor): Tensor of shape [batch_size, vocab_size]
         """
-
+        # print('beam step begin!')
         output_dist = decode_fn(tokens, mask)
         next_token_lls = output_dist[-1, :, :].cpu()
 

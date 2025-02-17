@@ -273,67 +273,27 @@ class MegaMolBART(BaseGenerativeWorkflow):
         torch.cuda.empty_cache()
         return embedding, pad_mask
 
-    # def inverse_transform(self, embeddings, mem_pad_mask, batch_size=1, k=1, sanitize=True):
-    #     mem_pad_mask = mem_pad_mask.clone()
-    #     smiles_interp_list = []
-    #     with torch.no_grad():
-    #         for memory in embeddings:
-    #             print(memory.shape)
-    #             if isinstance(memory, list):
-    #                 memory = torch.FloatTensor(memory).cuda()
-
-    #             decode_fn = partial(self.model._decode_fn,
-    #                                 mem_pad_mask=mem_pad_mask.type(torch.LongTensor).cuda(),
-    #                                 memory=memory)
-
-    #             mol_strs, _ = self.model.sampler.beam_decode(decode_fn,
-    #                                                          batch_size=batch_size,
-    #                                                          device='cuda', # hard code
-    #                                                          k=k)
-    #             mol_strs = sum(mol_strs, [])  # flatten list
-
-    #             # TODO: add back sanitization and validity checking once model is trained
-    #             # logger.warn('WARNING: MOLECULE VALIDATION AND SANITIZATION CURRENTLY DISABLED')
-    #             for smiles in mol_strs:
-    #                 if sanitize:
-    #                     mol = Chem.MolFromSmiles(smiles, sanitize=sanitize)
-    #                     if mol:
-    #                         sanitized_smiles = Chem.MolToSmiles(mol)
-    #                         smiles_interp_list.append(sanitized_smiles)
-    #                         logger.debug(f'Sanitized SMILES {sanitized_smiles} added...')
-    #                         break
-    #                 smiles_interp_list.append(smiles)
-
-    #     return smiles_interp_list
-    
-    def inverse_transform(self, embeddings, mem_pad_mask, batch_size=1, k=1, sanitize=True, device='cuda'):
+    def inverse_transform(self, memory, mem_pad_mask, batch_size=1, k=1, sanitize=True, device='cuda'):
+        mem_pad_mask = mem_pad_mask.clone()
         smiles_interp_list = []
-        seq_len, batch_size_, emb_size = embeddings.shape
-        assert batch_size_ == batch_size, f"Provided batch size does not match the shape of embeddings: {batch_size_} and {batch_size}."
-        
         with torch.no_grad():
-            for i in range(batch_size_):
-                memory = embeddings[:, i:i+1, :].clone()
-                pad_mask = mem_pad_mask[:, i:i+1].clone()
+            if isinstance(memory, list):
+                memory = torch.FloatTensor(memory).cuda()
 
-                if isinstance(memory, list):
-                    memory = torch.FloatTensor(memory).cuda()
+            decode_fn = partial(self.model._decode_fn,
+                                mem_pad_mask=mem_pad_mask.type(torch.LongTensor).cuda(),
+                                memory=memory)
 
-                decode_fn = partial(self.model._decode_fn,
-                                    mem_pad_mask=pad_mask.type(torch.LongTensor).cuda(),
-                                    memory=memory)
-
-                mol_strs, _ = self.model.sampler.beam_decode(decode_fn,
-                                                            batch_size=1,
-                                                            device=device,  # hard code
+            mol_strs, _ = self.model.sampler.beam_decode(decode_fn,
+                                                            batch_size=batch_size,
+                                                            device=device, # hard code
                                                             k=k)
-                mol_strs = sum(mol_strs, [])
-                # TODO: add back sanitization and validity checking once model is trained
-                # logger.warn('WARNING: MOLECULE VALIDATION AND SANITIZATION CURRENTLY DISABLED')
-                valid_smiles_added = False  # Flag to track if any valid SMILES have been added
-                for smiles in mol_strs:
+            # TODO: more smiles can be generated together when k>1.
+            for batch_idx in range(batch_size):
+                valid_smiles_added = False  # Flag to track if a valid SMILES has been added
+                for smiles in mol_strs[batch_idx]:  # Iterate over the generated strings for this batch item
                     mol = Chem.MolFromSmiles(smiles)
-                    
+
                     if mol:
                         if sanitize:
                             sanitized_smiles = Chem.MolToSmiles(mol)
@@ -346,22 +306,11 @@ class MegaMolBART(BaseGenerativeWorkflow):
                             valid_smiles_added = True
                             break  # Add one valid SMILES and exit the loop
 
-                # If no valid SMILES were added, add the first one as a fallback
+                # If no valid SMILES were added for this batch, fallback to the first generated SMILES
                 if not valid_smiles_added:
-                    smiles_interp_list.append(mol_strs[0])
-                
-                # for smiles in mol_strs:
-                #     if sanitize:
-                #         mol = Chem.MolFromSmiles(smiles, sanitize=sanitize)
-                #         if mol:
-                #             sanitized_smiles = Chem.MolToSmiles(mol)
-                #             smiles_interp_list.append(sanitized_smiles)
-                #             logger.debug(f'Sanitized SMILES {sanitized_smiles} added...')
-                #             break
-                #     smiles_interp_list.append(smiles)
+                    smiles_interp_list.append(mol_strs[batch_idx][0])
 
         return smiles_interp_list
-
 
     def interpolate_molecules(self, smiles1, smiles2, num_interp, tokenizer, k=1):
         """Interpolate between two molecules in embedding space.

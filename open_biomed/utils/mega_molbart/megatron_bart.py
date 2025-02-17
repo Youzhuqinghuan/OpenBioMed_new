@@ -418,7 +418,8 @@ class ParallelTransformerDecoder(MegatronModule):
         Returns:
             decoded output of shape (tgt_len, batch, embed_dim)
         """
-
+        # print('ParallelTransformerDecoder begin!')
+        # print(f'tgt shape: {tgt.shape} | memory shape: {memory.shape} | tgt_mask shape: {tgt_mask.shape} | tgt_key_padding_mask shape: {tgt_key_padding_mask.shape} | memory_key_padding_mask shape: {memory_key_padding_mask.shape}')
         output = tgt
         for mod in self.layers:
             output = mod(output, encoder_out=memory,
@@ -562,12 +563,12 @@ class MegatronBART(MegatronModule):
                 "memory_pad_mask": bool tensor of memory padding mask of shape (src_len, batch_size)
             })
         """
-
+        # print(f'MegatronBART.decode begin!')
         decoder_input = batch['decoder_input']
         decoder_pad_mask = batch['decoder_pad_mask'].transpose(0, 1)
         memory_input = batch['memory_input']
         memory_pad_mask = batch['memory_pad_mask'].transpose(0, 1)
-
+        # print(f'decoder_input shape: {decoder_input.shape} | decoder_pad_mask shape: {decoder_pad_mask.shape} | memory_input shape: {memory_input.shape} | memory_pad_mask shape: {memory_pad_mask.shape}')
         decoder_embs = self._construct_input(decoder_input)
 
         (seq_len, _, _) = tuple(decoder_embs.size())

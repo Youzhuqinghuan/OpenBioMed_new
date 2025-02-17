@@ -9,11 +9,13 @@ model:
   SSL_emb_dim: 256
   smiles_max_length: 512
   text_max_length: 512
+  fusion_n_layer: 4
+  fusion_n_head: 4
   batch_size_train: 64
   batch_size_eval: 64
   device: cuda:0
   predict:
-    num_beams: 2
+    num_beams: 1
     max_length: 512
 
 dataset:
@@ -21,9 +23,9 @@ dataset:
   batch_size_eval: 64
 
 train:
-  max_epochs: 10
+  max_epochs: 2
   batch_size: 64
-  ckpt_freq: 3
+  ckpt_freq: 1
 
 evaluation:
   batch_size: 64
