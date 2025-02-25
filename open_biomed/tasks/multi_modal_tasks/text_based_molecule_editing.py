@@ -9,7 +9,7 @@ from pytorch_lightning.utilities.types import STEP_OUTPUT
 import torch
 
 from open_biomed.data import molecule_fingerprint_similarity, check_identical_molecules
-from open_biomed.tasks.base_task import BaseTask, DefaultDataModule, DefaultModelWrapper
+from open_biomed.tasks.base_task import BaseTask, DefaultDataModule, DefaultModelWrapper, LatentOptimizationDataModule
 from open_biomed.utils.collator import Collator
 from open_biomed.utils.config import Config, Struct
 from open_biomed.utils.featurizer import Featurizer
@@ -20,7 +20,8 @@ class TextMoleculeEditing(BaseTask):
 
     @staticmethod
     def get_datamodule(dataset_cfg: Config, featurizer: Featurizer, collator: Collator) -> pl.LightningDataModule:
-        return DefaultDataModule("text_based_molecule_editing", dataset_cfg, featurizer, collator)
+        # return DefaultDataModule("text_based_molecule_editing", dataset_cfg, featurizer, collator)
+        return LatentOptimizationDataModule("text_based_molecule_editing", dataset_cfg, featurizer, collator) if hasattr(dataset_cfg, 'latent_optimization') else DefaultDataModule("text_based_molecule_editing", dataset_cfg, featurizer, collator)
 
     @staticmethod
     def get_model_wrapper(model_cfg: Config, train_cfg: Config) -> pl.LightningModule:
@@ -56,10 +57,17 @@ class TextMoleculeEditingEvaluationCallback(pl.Callback):
         self.outputs.extend(outputs)
         if batch_idx == 0:
             for i in range(2):
-                out_labels = '\n'.join([str(x) for x in self.eval_dataset.labels[i]])
+                if isinstance(self.eval_dataset.labels[i], List):
+                    out_labels = '\n'.join([str(x) for x in self.eval_dataset.labels[i]])
+                else: # in latent optimization model, list type is List[Molecule]
+                    out_labels = '\n'.join([str(self.eval_dataset.labels[i])])
                 logging.info(f"Original: {self.eval_dataset.molecules[i]}")
                 logging.info(f"Prompt: {self.eval_dataset.texts[i]}")
-                logging.info(f"Predict: {self.outputs[i]}")
+                if isinstance(self.outputs[i], List):
+                    joined_output = '\n'.join([str(x) for x in self.outputs[i]])
+                    logging.info(f"Predict: {joined_output}")
+                else:
+                    logging.info(f"Predict: {self.outputs[i]}")
                 logging.info(f"Ground Truth: {out_labels}")
 
     def on_validation_epoch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
@@ -80,23 +88,43 @@ class TextMoleculeEditingEvaluationCallback(pl.Callback):
 
             orig_mol, prompt, label = self.eval_dataset.molecules[i], self.eval_dataset.texts[i], self.eval_dataset.labels[i]
             all_ref = []
-            for ref_mol in label:
-                cur_sim = molecule_fingerprint_similarity(self.outputs[i], ref_mol)
-                if cur_sim > best_sim:
-                    best_sim = cur_sim
-                    best_ref = ref_mol
-                all_ref.append(str(ref_mol))
-                cur_sim = molecule_fingerprint_similarity(orig_mol, ref_mol)
-                if cur_sim > best_sim_orig:
-                    best_sim_orig = cur_sim
+            if isinstance(label, List): # Multi-label
+                for ref_mol in label:
+                    cur_sim = molecule_fingerprint_similarity(self.outputs[i], ref_mol)
+                    if cur_sim > best_sim:
+                        best_sim = cur_sim
+                        best_ref = ref_mol
+                    all_ref.append(str(ref_mol))
+                    cur_sim = molecule_fingerprint_similarity(orig_mol, ref_mol)
+                    if cur_sim > best_sim_orig:
+                        best_sim_orig = cur_sim
                 
-            output_str += "\t".join([str(orig_mol), str(prompt), str(self.outputs[i]), str(best_ref), ",".join(all_ref), f"{best_sim:.4f}", f"{best_sim_orig:.4f}"]) + "\n"
-            if self.outputs[i].rdmol is not None:
-                cnt_valid += 1
-            if best_sim > best_sim_orig:
-                cnt_improved += 1
-            if check_identical_molecules(self.outputs[i], best_ref):
-                cnt_accurate += 1
+                output_str += "\t".join([str(orig_mol), str(prompt), str(self.outputs[i]), str(best_ref), ",".join(all_ref), f"{best_sim:.4f}", f"{best_sim_orig:.4f}"]) + "\n"
+                if self.outputs[i].rdmol is not None:
+                    cnt_valid += 1
+                if best_sim > best_sim_orig:
+                    cnt_improved += 1
+                if check_identical_molecules(self.outputs[i], best_ref):
+                    cnt_accurate += 1
+            else: # Multi-output
+                all_ref.append(str(label))
+                best_ref = label
+                best_sim = 0.0
+                best_sim_orig = molecule_fingerprint_similarity(orig_mol, label)
+                best_output = self.outputs[i][0]
+                for gen_mol in self.outputs[i]:
+                    cur_sim = molecule_fingerprint_similarity(gen_mol, label)
+                    if cur_sim > best_sim:
+                        best_sim = cur_sim
+                        best_output = gen_mol
+                
+                output_str += "\t".join([str(orig_mol), str(prompt), str(best_output), str(best_ref), ",".join(all_ref), f"{best_sim:.4f}", f"{best_sim_orig:.4f}"]) + "\n"
+                if best_output.rdmol is not None:
+                    cnt_valid += 1
+                if best_sim > best_sim_orig:
+                    cnt_improved += 1
+                if check_identical_molecules(best_output, best_ref):
+                    cnt_accurate += 1
 
         output_path = os.path.join(trainer.default_root_dir, f"{self.status}_outputs", f"epoch{pl_module.current_epoch}")
         out_metrics = {

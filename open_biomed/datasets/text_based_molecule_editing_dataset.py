@@ -6,7 +6,7 @@ import os
 from torch.utils.data import Dataset
 
 from open_biomed.data import Molecule, Text
-from open_biomed.datasets.base_dataset import BaseDataset, assign_split, featurize
+from open_biomed.datasets.base_dataset import BaseDataset, assign_split, featurize, featurize_with_label
 from open_biomed.utils.config import Config
 from open_biomed.utils.featurizer import Featurizer, Featurized
 
@@ -64,6 +64,49 @@ class TextBasedMoleculeEditingEvalDataset(Dataset):
             "label": self.labels[index],
         }
     
+    def get_labels(self) -> List[Molecule]:
+        return self.labels
+    
+class TextBasedMoleculeEditingLatentOptimizationDataset(Dataset):
+    def __init__(self) -> None:
+        super(TextBasedMoleculeEditingLatentOptimizationDataset, self).__init__()
+        self.molecules, self.texts, self.labels = [], [], []
+
+    @classmethod
+    def from_train_set(cls, dataset: TextBasedMoleculeEditingDataset) -> Self:
+        # NOTE: 
+        # Given the same original molecule and text, multiple results are acceptable
+        # We combine these results for evaluation
+        mol2label = dict()
+        for i in range(len(dataset)):
+            molecule = dataset.molecules[i]
+            text = dataset.texts[i]
+            label = dataset.labels[i]
+            dict_key = str(molecule) + "___" + str(text)
+            if dict_key not in mol2label:
+                mol2label[dict_key] = []
+            mol2label[dict_key].append((molecule, text, label))
+        new_dataset = cls()
+        for k, v in mol2label.items():
+            new_dataset.molecules.append(v[0][0])
+            new_dataset.texts.append(v[0][1])
+            new_dataset.labels.append([x[2] for x in v])
+        # flatten labels
+        new_dataset.labels = sum(new_dataset.labels, [])
+        new_dataset.featurizer = dataset.featurizer
+        return new_dataset
+
+    def __len__(self) -> int:
+        return len(self.molecules)
+
+    @featurize_with_label
+    def __getitem__(self, index) -> Dict[str, Featurized[Any]]:
+        return {
+            "molecule": self.molecules[index], 
+            "text": self.texts[index],
+            "label": self.labels[index],
+        }
+    
     def get_labels(self) -> List[List[Text]]:
         return self.labels
 
@@ -92,12 +135,20 @@ class FSMolEdit(TextBasedMoleculeEditingDataset):
                         break
         
     @assign_split
-    def split(self, split_cfg: Optional[Config] = None) -> Tuple[Any, Any, Any]:
-        attrs = ["molecules", "texts", "labels"]
-        ret = (
-            self.get_subset(self.split_indexes["train"], attrs), 
-            TextBasedMoleculeEditingEvalDataset.from_train_set(self.get_subset(self.split_indexes["valid"], attrs)),
-            TextBasedMoleculeEditingEvalDataset.from_train_set(self.get_subset(self.split_indexes["test"], attrs)),
-        )
+    def split(self, split_cfg: Optional[Config] = None):
+        if hasattr(split_cfg, 'latent_optimization'):
+            attrs = ["molecules", "texts", "labels"]
+            ret = (
+                None, 
+                None,
+                TextBasedMoleculeEditingLatentOptimizationDataset.from_train_set(self.get_subset(self.split_indexes["test"], attrs)),
+            )
+        else:
+            attrs = ["molecules", "texts", "labels"]
+            ret = (
+                self.get_subset(self.split_indexes["train"], attrs), 
+                TextBasedMoleculeEditingEvalDataset.from_train_set(self.get_subset(self.split_indexes["valid"], attrs)),
+                TextBasedMoleculeEditingEvalDataset.from_train_set(self.get_subset(self.split_indexes["test"], attrs)),
+            )
         del self
         return ret

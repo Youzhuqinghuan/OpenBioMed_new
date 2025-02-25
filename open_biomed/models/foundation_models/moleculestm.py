@@ -5,6 +5,7 @@ import math
 import logging
 import torch
 import torch.nn as nn
+from torch import optim
 import torch.nn.functional as F
 torch.set_float32_matmul_precision('medium')
 from transformers import T5Tokenizer, T5ForConditionalGeneration, DataCollatorWithPadding
@@ -76,6 +77,19 @@ def mean_pooling(token_embeddings, attention_mask):
     sum_mask = torch.clamp(input_mask_expanded.sum(0), min=1e-9) # [batch_size, emb_size(256)]
     return sum_embeddings / sum_mask
 
+def get_lr(t, initial_lr, rampdown=0.25, rampup=0.05):
+    lr_ramp = min(1, (1 - t) / rampdown)
+    lr_ramp = 0.5 - 0.5 * math.cos(lr_ramp * math.pi)
+    lr_ramp = lr_ramp * min(1, t / rampup)
+    return initial_lr * lr_ramp
+
+def clip_loss_for_edit(molecule_repr, text_repr):
+    molecule_repr = F.normalize(molecule_repr, dim=-1)
+    text_repr = F.normalize(text_repr, dim=-1)
+
+    similarity = -torch.mm(molecule_repr, text_repr.transpose(0, 1))[0]
+    return similarity
+
 class MoleculeSTM(TextBasedMoleculeEditingModel):
     def __init__(self, model_cfg: Config) -> None:
         super(MoleculeSTM, self).__init__(model_cfg)
@@ -90,23 +104,17 @@ class MoleculeSTM(TextBasedMoleculeEditingModel):
         self.mol2latent = self.mol2latent.to(self.device)
         self.generation2foundation = self.generation2foundation.to(self.device)
         self.foundation2generation = self.foundation2generation.to(self.device)
-        self.fusion = FeatureFusionModule(
-            emb_dim=model_cfg.SSL_emb_dim,
-            n_layers=model_cfg.fusion_n_layer,
-            n_heads=model_cfg.fusion_n_head,
-            max_seq_len=model_cfg.smiles_max_length
-        ).to(self.device)
         
         for param in self.text_model.parameters():
             param.requires_grad = False
-        # for param in self.molecule_model.parameters():
-        #     param.requires_grad = False
+        for param in self.molecule_model.parameters():
+            param.requires_grad = False
         for param in self.text2latent.parameters():
             param.requires_grad = False
         for param in self.mol2latent.parameters():
             param.requires_grad = False
         for param in self.generation2foundation.parameters():
-            param.requires_grad = False
+            param.requires_grad = True
         for param in self.foundation2generation.parameters():
             param.requires_grad = False
         
@@ -132,41 +140,44 @@ class MoleculeSTM(TextBasedMoleculeEditingModel):
         text: Featurized[Text], 
         label: Featurized[Molecule],
     ) -> Dict[str, torch.Tensor]:
-        device = self.device
-        for key in text:
-            text[key] = text[key].to(device)
-        text_output = self.text_model(input_ids=text['input_ids'], attention_mask=text['attention_mask'])
-        text_repr = text_output["pooler_output"] # [batch_size, emb_size(768)] for [CLS]
-        text_repr = self.foundation2generation(self.text2latent(text_repr)) # [batch_size, emb_size(256)]
+        return
+        # device = self.device
+        # for key in text:
+        #     text[key] = text[key].to(device)
+        # text_output = self.text_model(input_ids=text['input_ids'], attention_mask=text['attention_mask'])
+        # text_repr = text_output["pooler_output"] # [batch_size, emb_size(768)] for [CLS]
+        # text_repr = self.foundation2generation(self.text2latent(text_repr)) # [batch_size, emb_size(256)]
 
-        for key in molecule:
-            molecule[key] = molecule[key].to(device)
+        # for key in molecule:
+        #     molecule[key] = molecule[key].to(device)
 
-        molecule_output = self.molecule_model.encode(molecule) # [seq_len, batch_size, emb_size(256)]
-        molecule_pad_mask = molecule['encoder_pad_mask']
+        # molecule_output = self.molecule_model.encode(molecule) # [seq_len, batch_size, emb_size(256)]
+        # molecule_pad_mask = molecule['encoder_pad_mask']
+        # # _, batch_size = molecule['encoder_input'].shape
 
-        for key in label:
-            label[key] = label[key].to(device)
+        # for key in label:
+        #     label[key] = label[key].to(device)
             
-        label_output = self.molecule_model.encode(label) # [seq_len, batch_size, emb_size(256)]
-        label_pad_mask = label['encoder_pad_mask']
+        # label_output = self.molecule_model.encode(label) # [seq_len, batch_size, emb_size(256)]
+        # label_pad_mask = label['encoder_pad_mask']
         
-        fused_repr = self.fusion(text_repr, molecule_output, molecule_pad_mask) # [seq_len, batch_size, emb_size(256)]
+        # fused_repr = self.fusion(text_repr, molecule_output, molecule_pad_mask) # [seq_len, batch_size, emb_size(256)]
         
-        fused_repr = mean_pooling(fused_repr, molecule_pad_mask) # [batch_size, emb_size(256)]
-        fused_repr = F.normalize(fused_repr, dim=-1)
-        label_repr = mean_pooling(label_output, label_pad_mask) # [batch_size, emb_size(256)]
-        label_repr = F.normalize(label_repr, dim=-1)
-        cos_loss = 1 - F.cosine_similarity(fused_repr, label_repr, dim=-1)
-        cos_loss = cos_loss.mean()
+        # fused_repr = mean_pooling(fused_repr, molecule_pad_mask) # [batch_size, emb_size(256)]
+        # fused_repr = F.normalize(fused_repr, dim=-1)
+        # label_repr = mean_pooling(label_output, label_pad_mask) # [batch_size, emb_size(256)]
+        # label_repr = F.normalize(label_repr, dim=-1)
+        # cos_loss = 1 - F.cosine_similarity(fused_repr, label_repr, dim=-1)
+        # cos_loss = cos_loss.mean()
 
-        return {
-            "loss": cos_loss
-        }
+        # return {
+        #     "loss": cos_loss
+        # }
 
     def predict_text_based_molecule_editing(self, 
         molecule: Featurized[Molecule], 
         text: Featurized[Text],
+        label: Featurized[Molecule],
     ) -> List[Molecule]:
         device = self.device
         for key in text:
@@ -174,82 +185,96 @@ class MoleculeSTM(TextBasedMoleculeEditingModel):
         text_output = self.text_model(input_ids=text['input_ids'], attention_mask=text['attention_mask'])
         text_repr = text_output["pooler_output"] # [batch_size, emb_size(768)] for [CLS]
         text_repr = self.foundation2generation(self.text2latent(text_repr)) # [batch_size, emb_size(256)]
-
+        
         for key in molecule:
             molecule[key] = molecule[key].to(device)
-        molecule_output = self.molecule_model.encode(molecule) # [seq_len, batch_size, emb_size(256)]
-        molecule_pad_mask = molecule['encoder_pad_mask']
+        molecule_output = self.molecule_model.encode(molecule) # [seq_len1, batch_size, emb_size(256)]
+        molecule_pad_mask = molecule['encoder_pad_mask'] # [seq_len1, batch_size]
         _, batch_size = molecule['encoder_input'].shape
+        
+        if self.cfg.use_label:
+            for key in label:
+                label[key] = label[key].to(device)
+            label_output = self.molecule_model.encode(label) # [seq_len2, batch_size, emb_size(256)]
+            label_pad_mask = label['encoder_pad_mask'] # [seq_len2, batch_size]
+            
+            label_repr = mean_pooling(label_output, label_pad_mask) # [batch_size, emb_size(256)]
+            if self.cfg.normalize:
+                label_repr = F.normalize(label_repr, dim=-1)
+        
+        l2_lambda_list = [1e1, 1e0, 1e-1, 1e-2, 1e-3] # self.cfg.l2_lambda_list
+        all_generated_mols = []
+        
+        with torch.enable_grad():
+            if self.cfg.use_noise_for_init:
+                random_noise = torch.randn(molecule_output.size()).to(device)
+            
+            for l2_lambda in l2_lambda_list:
+                if self.cfg.use_noise_for_init:
+                    latent = molecule_output.detach().clone() + random_noise
+                else:
+                    latent = molecule_output.detach().clone()
+                pad_mask = molecule_pad_mask.detach().clone()
+                latent.requires_grad = True
+                optimizer = optim.Adam([latent], lr=self.cfg.lr)
 
-        fused_repr = self.fusion(text_repr, molecule_output, molecule_pad_mask) # [seq_len, batch_size, emb_size(256)]
+                for i in range(self.cfg.inner_epochs):
+                    t = i / self.cfg.inner_epochs
+                    lr = get_lr(t, self.cfg.lr)
+                    optimizer.param_groups[0]["lr"] = lr
 
-        regenerate_mols = self.MegaMolBART_wrapper.inverse_transform(
-            fused_repr.to(device), 
-            molecule['encoder_pad_mask'].bool(),
-            batch_size, k=self.cfg.predict.num_beams, sanitize=True, device=self.device
-            )
+                    molecule_repr_generation = mean_pooling(latent, pad_mask) # [B, d]
+                    if self.cfg.normalize:
+                        molecule_repr_generation = F.normalize(molecule_repr_generation, dim=-1)
+                        
+                    if self.cfg.use_label:
+                        # temperature = self.cfg.temperature
+                        temperature = 0.07 * (1.2 - t)
+                        contrastive_weight = self.cfg.contrastive_weight
+                        sim_matrix = torch.mm(molecule_repr_generation, label_repr.T) / temperature
+                        contrastive_labels = torch.arange(batch_size).to(device)
+                        contrastive_loss = contrastive_weight * F.cross_entropy(sim_matrix, contrastive_labels)
+                        
+                    molecule_repr_MoleculeSTM = self.generation2foundation(molecule_repr_generation)
 
-        return [Molecule.from_smiles(smi) for smi in regenerate_mols]
+                    clip_loss_ = clip_loss_for_edit(molecule_repr_MoleculeSTM, text_repr).mean()
+                    l2_loss_ =  l2_lambda * ((molecule_output - latent) ** 2).mean()
+
+                    if self.cfg.use_label:
+                        loss = clip_loss_ + l2_loss_ + contrastive_loss
+                    else:
+                        loss = clip_loss_ + l2_loss_
+
+                    optimizer.zero_grad()
+                    loss.backward(retain_graph=True)
+                    optimizer.step()
+                
+                generated_mols = self.MegaMolBART_wrapper.inverse_transform(latent, pad_mask.bool(), batch_size, k=1, sanitize=True)
+                all_generated_mols.append([Molecule.from_smiles(smi) for smi in generated_mols])
+
+        return list(map(list, zip(*all_generated_mols))) # List[List[Molecule]]
+        # device = self.device
+        # for key in text:
+        #     text[key] = text[key].to(device)
+        # text_output = self.text_model(input_ids=text['input_ids'], attention_mask=text['attention_mask'])
+        # text_repr = text_output["pooler_output"] # [batch_size, emb_size(768)] for [CLS]
+        # text_repr = self.foundation2generation(self.text2latent(text_repr)) # [batch_size, emb_size(256)]
+
+        # for key in molecule:
+        #     molecule[key] = molecule[key].to(device)
+        # molecule_output = self.molecule_model.encode(molecule) # [seq_len, batch_size, emb_size(256)]
+        # molecule_pad_mask = molecule['encoder_pad_mask']
+        # _, batch_size = molecule['encoder_input'].shape
+
+        # fused_repr = self.fusion(text_repr, molecule_output, molecule_pad_mask) # [seq_len, batch_size, emb_size(256)]
+
+        # regenerate_mols = self.MegaMolBART_wrapper.inverse_transform(
+        #     fused_repr.to(device), 
+        #     molecule['encoder_pad_mask'].bool(),
+        #     batch_size, k=self.cfg.predict.num_beams, sanitize=True, device=self.device
+        #     )
+
+        # return [Molecule.from_smiles(smi) for smi in regenerate_mols]
+
     
-class FeatureFusionModule(nn.Module):
-    def __init__(self, 
-                 emb_dim=256, 
-                 n_layers=2,
-                 n_heads=4,
-                 max_seq_len=512):
-        super().__init__()
-        
-        self.register_buffer(
-            "position_emb",
-            self._create_sinusoidal_emb(max_seq_len*2, emb_dim)
-        )
-        
-        self.self_attn = nn.TransformerEncoder(
-            encoder_layer=nn.TransformerEncoderLayer(
-                d_model=emb_dim,
-                nhead=n_heads,
-                dim_feedforward=emb_dim*4,
-                dropout=0.1,
-                batch_first=False
-            ),
-            num_layers=n_layers
-        )
-        
-    def _create_sinusoidal_emb(self, max_len, dim):
-        position = torch.arange(max_len).unsqueeze(1)  # [max_len, 1]
-        div_term = torch.exp(torch.arange(0, dim, 2) * (-math.log(10000.0) / dim))
-        pe = torch.zeros(max_len, dim)
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        return pe.unsqueeze(1)  # [max_len, 1, dim]
-
-    def forward(self, text_repr, mol_repr, molecule_pad_mask):
-        """
-        text_repr: [batch_size, 256] 文本全局特征
-        mol_repr: [seq_len, batch_size, 256] 分子序列特征
-        molecule_pad_mask: [seq_len, batch_size]
-        return: [seq_len, batch_size, 256]
-        """
-        seq_len = mol_repr.size(0)
-        batch_size = mol_repr.size(1)
-        text_mask = torch.zeros(seq_len, batch_size, 
-                              dtype=torch.bool, device=mol_repr.device)
-        full_mask = torch.cat([text_mask, molecule_pad_mask], dim=0).transpose(0, 1) # [bs, 2seq]
-
-        text_seq = text_repr.unsqueeze(0).expand(seq_len, -1, -1)  # [seq, bs, 256]
-        
-        concat_seq = torch.cat([text_seq, mol_repr], dim=0)  # [2seq, bs, 256]
-        
-        positions = self.position_emb[:concat_seq.size(0)]  # [2seq, 1, dim]
-        concat_seq = concat_seq + positions
-
-        attn_output = self.self_attn(
-            concat_seq,
-            src_key_padding_mask=full_mask
-            )  # [2seq, bs, 256]
-        
-        fused_mol = attn_output[seq_len:]  # [seq, bs, 256]
-        
-        return fused_mol
-    
-# bash scripts/train.sh text_based_molecule_editing moleculestm fs_mol_edit 0 > /data/hucp/output.log 2>&1
+# bash scripts/moledit.sh text_based_molecule_editing moleculestm fs_mol_multi 0 > /data/hucp/output.log 2>&1

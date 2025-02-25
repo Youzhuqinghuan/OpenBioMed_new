@@ -83,6 +83,28 @@ class DefaultDataModule(pl.LightningDataModule):
 
     def test_dataloader(self) -> EVAL_DATALOADERS:
         return self.test_loader
+    
+class LatentOptimizationDataModule(pl.LightningDataModule):
+    def __init__(self, task: str,dataset_cfg: Config, featurizer: Featurizer, collator: Collator) -> None:
+        super(LatentOptimizationDataModule, self).__init__()
+        dataset = DATASET_REGISTRY[task][dataset_cfg.name](dataset_cfg, featurizer)
+        _, _, test = dataset.split(dataset_cfg)
+        self.test_loader = DataLoader(
+            dataset=test,
+            batch_size=dataset_cfg.batch_size_eval,
+            shuffle=False,
+            num_workers=dataset_cfg.num_workers,
+            collate_fn=collator,
+        )
+
+    def train_dataloader(self) -> TRAIN_DATALOADERS:
+        return None
+
+    def val_dataloader(self) -> EVAL_DATALOADERS:
+        return None
+
+    def test_dataloader(self) -> EVAL_DATALOADERS:
+        return self.test_loader
 
 class DefaultModelWrapper(ModelWrapper):
     def __init__(self, task: str, model_cfg: Config, train_cfg: Config) -> None:

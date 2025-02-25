@@ -14,6 +14,14 @@ model:
   batch_size_train: 64
   batch_size_eval: 64
   device: cuda:0
+  use_noise_for_init: True
+  lr: 0.1
+  inner_epochs: 100
+  normalize: True
+  l2_lambda_list: [1e1, 1e0, 1e-1, 1e-2, 1e-3]
+  use_label: True
+  temperature: 0.7
+  contrastive_weight: 1.0
   predict:
     num_beams: 1
     max_length: 512
@@ -21,11 +29,13 @@ model:
 dataset:
   batch_size_train: 64
   batch_size_eval: 64
+  latent_optimization: True
 
 train:
   max_epochs: 2
   batch_size: 64
   ckpt_freq: 1
+  inner_epoch: 100
 
 evaluation:
   batch_size: 64

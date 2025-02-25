@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Union
 from typing_extensions import Any
-
 import os
 os.environ['TRANSFORMERS_NO_ADVISORY_WARNINGS'] = 'true'
 import warnings
@@ -11,6 +10,8 @@ import argparse
 import datetime
 import logging
 import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
@@ -18,9 +19,8 @@ import pytz
 import torch
 from tqdm import tqdm
 
-from open_biomed.data import Molecule, Protein, Pocket
-from open_biomed.tasks import TASK_REGISTRY
 from open_biomed.utils.callbacks import RecoverCallback, GradientClip
+from open_biomed.tasks import TASK_REGISTRY
 from open_biomed.utils.config import Config, Struct, merge_config
 from open_biomed.utils.distributed import setup_outputs_for_distributed
 from open_biomed.utils.misc import sub_batch_by_interval
@@ -60,11 +60,11 @@ class TrainValPipeline(Pipeline):
 
         # Prepare task
         if self.cfg.task not in TASK_REGISTRY:
-            raise NotImplementedError(f"{self.cfg.task} has not been implemented! Current tasks are {[task for task in TASK_REGISTRY.keys()]}")
+            raise NotImplementedError(f"{self.cfg.task} has not been implemented! Current tasks are {[task for task in TASK_REGISTRY.keys]}")
         self.task = TASK_REGISTRY[self.cfg.task]
         self.cfg.train.monitor = self.task.get_monitor_cfg()
 
-        self.setup_infra()
+        # self.setup_infra()
 
         # Prepare model
         # NOTE: the model should be prepared in advance for featurizers and collators
@@ -93,7 +93,7 @@ class TrainValPipeline(Pipeline):
         # Dataset config
         parser.add_argument("--dataset_name", type=str)
         parser.add_argument("--dataset_path", type=str)
-        parser.add_argument("--num_workers", type=int, default=64)
+        parser.add_argument("--num_workers", type=int, default=1)
 
         # Train & Val params
         parser.add_argument("--batch_size_train", type=int, default=8)
@@ -172,12 +172,12 @@ class TrainValPipeline(Pipeline):
         logging.info(f"The config of this process is:\n{self.cfg}")
     
     def setup_data(self) -> None:
-        logging.info("Preparing data...")
+        print("Preparing data...")
         self.datamodule = self.task.get_datamodule(
             self.cfg.dataset,
             *self.model.get_featurizer(),
         )
-        logging.info("Data preparation finished!")
+        print("Data preparation finished!")
 
     def setup_model(self) -> None:
         self.model = self.task.get_model_wrapper(self.cfg.model, self.cfg.train)
@@ -185,36 +185,36 @@ class TrainValPipeline(Pipeline):
             max_grad_norm = float(self.cfg.train.max_grad_norm)
         except ValueError:
             max_grad_norm = self.cfg.train.max_grad_norm
-        self.checkpoint_callback = ModelCheckpoint(
-            monitor=self.cfg.train.monitor.name,
-            every_n_epochs=self.cfg.train.ckpt_freq,
-            dirpath=self.cfg.accounting.checkpoint_dir,
-            filename="epoch{epoch:02d}" + self.cfg.train.monitor.output_str,
-            save_top_k=self.cfg.train.save_top_k,
-            mode=self.cfg.train.monitor.mode,
-            auto_insert_metric_name=False,
-            save_last=True,
-        )
-        self.trainer = pl.Trainer(
-            default_root_dir=self.cfg.accounting.dir,
-            max_epochs=self.cfg.train.max_epochs,
-            check_val_every_n_epoch=self.cfg.train.ckpt_freq,
-            devices=self.cfg.train.num_gpus,
-            strategy="ddp_find_unused_parameters_true" if self.cfg.train.distributed > 1 else "auto",
-            logger=self.wandb_logger,
-            inference_mode=not self.cfg.test_only,
-            num_sanity_val_steps=0,
-            log_every_n_steps=self.cfg.train.log_interval,
-            callbacks=[
-                RecoverCallback(
-                    latest_ckpt=os.path.join(self.cfg.accounting.checkpoint_dir, "last.ckpt"),
-                    resume=self.cfg.train.resume,
-                    recover_trigger_loss=1e7,
-                ),
-                GradientClip(max_grad_norm=max_grad_norm),
-                self.checkpoint_callback,
-            ] + [self.task.get_callbacks()]
-        )
+        # self.checkpoint_callback = ModelCheckpoint(
+        #     monitor=self.cfg.train.monitor.name,
+        #     every_n_epochs=self.cfg.train.ckpt_freq,
+        #     dirpath=self.cfg.accounting.checkpoint_dir,
+        #     filename="epoch{epoch:02d}" + self.cfg.train.monitor.output_str,
+        #     save_top_k=self.cfg.train.save_top_k,
+        #     mode=self.cfg.train.monitor.mode,
+        #     auto_insert_metric_name=False,
+        #     save_last=True,
+        # )
+        # self.trainer = pl.Trainer(
+        #     default_root_dir=self.cfg.accounting.dir,
+        #     max_epochs=self.cfg.train.max_epochs,
+        #     check_val_every_n_epoch=self.cfg.train.ckpt_freq,
+        #     devices=self.cfg.train.num_gpus,
+        #     strategy="ddp_find_unused_parameters_true" if self.cfg.train.distributed > 1 else "auto",
+        #     logger=self.wandb_logger,
+        #     inference_mode=not self.cfg.test_only,
+        #     num_sanity_val_steps=0,
+        #     log_every_n_steps=self.cfg.train.log_interval,
+        #     callbacks=[
+        #         RecoverCallback(
+        #             latest_ckpt=os.path.join(self.cfg.accounting.checkpoint_dir, "last.ckpt"),
+        #             resume=self.cfg.train.resume,
+        #             recover_trigger_loss=1e7,
+        #         ),
+        #         GradientClip(max_grad_norm=max_grad_norm),
+        #         self.checkpoint_callback,
+        #     ] + [self.task.get_callbacks()]
+        # )
 
     def run(self) -> None:
         if not self.cfg.test_only:
@@ -230,131 +230,39 @@ class TrainValPipeline(Pipeline):
             # TODO: implement parallel testing on multiple gpus
             self.trainer.test(self.model, dataloaders=self.datamodule.test_dataloader(), ckpt_path=ckpt_path)
         else:
-            if self.cfg.model.name == 'moleculestm':
-                self.trainer.test(self.model, dataloaders=self.datamodule.test_dataloader(), ckpt_path=None)
-            else:
-                self.trainer.test(self.model, dataloaders=self.datamodule.test_dataloader(), ckpt_path=self.cfg.evaluation.ckpt_path)
+            self.trainer.test(self.model, dataloaders=self.datamodule.test_dataloader(), ckpt_path=self.cfg.evaluation.ckpt_path)
+ 
+    def inspect_pipeline(self) -> None:
 
-class InferencePipeline(Pipeline):
-    def __init__(self, 
-        task: str="",
-        model: str="",
-        model_ckpt: str="",
-        logging_level: str="info",
-        device: str="cpu",
-        output_prompt: str="",
-        retry_limit: int=10,
-    ) -> None:
-        super().__init__()
+        # 查看数据处理的结果
+        # batch = next(iter(self.datamodule.train_dataloader()))
+        batch = next(iter(self.datamodule.test_dataloader()))
+        # print(len(batch['molecule']))
+        # print(batch)
+        # model_output = self.model.forward(batch)
+        model_output = self.model.predict(batch)
+        # print(model_output)
+        # # 查看模型的中间输出
+        # model_output = self.model.model(batch)
+        # print("Model intermediate output:")
+        # print(model_output)
 
-        self.cfg = Config(config_file=f"./configs/model/{model}.yaml")
-        self.cfg.task = task
-        self.cfg.model_ckpt = model_ckpt
-        self.cfg.device = device
-        self.cfg.logging_level = logging_level
-        self.best_batch_size = 1
-        self.best_batch_size_defined = False
-        self.output_prompt = output_prompt
-        self.retry_limit = retry_limit
+        # # 如果你需要查看其他的中间结果，比如 attention scores, logits 等，继续展开：
+        # # 注意：这取决于你的模型架构，可能需要调整
+        # with torch.no_grad():
+        #     input_ids = batch['input_ids'].to(self.model.device)  # 确保数据在正确的设备上
+        #     outputs = self.model.main_model.encoder(input_ids)
+        #     print("Encoder outputs:", outputs.last_hidden_state)
 
-        # Prepare task
-        if self.cfg.task not in TASK_REGISTRY:
-            raise NotImplementedError(f"{self.cfg.task} has not been implemented! Current tasks are {[task for task in TASK_REGISTRY]}")
-        self.task = TASK_REGISTRY[self.cfg.task]
+        #     # 进一步探索，比如查看 attention maps 等
+        #     print("Attention maps:", outputs.attentions)
 
-        # Prepare logging
-        self.setup_infra()
-        # Prepare model
-        self.setup_model()
 
-    def setup_infra(self) -> None:
-        logging.basicConfig(
-            format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-            datefmt="%m/%d/%Y %H:%M:%S",
-            level=logging_level[self.cfg.logging_level],
-        )
-        logging.info(f"The config of this process is:\n{self.cfg}")
 
-    def setup_model(self):
-        self.model = self.task.get_model_wrapper(self.cfg.model, None)
-        self.featurizer, self.collator = self.model.get_featurizer()
-        state_dict = torch.load(open(self.cfg.model_ckpt, "rb"), map_location="cpu")
-        if "state_dict" in state_dict:
-            state_dict = state_dict["state_dict"]
-        if hasattr(self.model.model, "load_ckpt"):
-            self.model.model.load_ckpt(state_dict)
-        else:
-            self.model.load_state_dict(state_dict, strict=False)
-        self.model.model.eval()
-        self.model.to(self.cfg.device)
 
-    def run(self, batch_size: Union[int, str]="max", *args, **kwargs) -> Any:
-        logging.debug(f"Input: {kwargs}")
-        
-        for key in kwargs:
-            if not isinstance(kwargs[key], list):
-                kwargs[key] = [kwargs[key]]
-            num_samples = len(kwargs[key])
-        
-        # Featurization
-        featurized = []
-        for i in range(num_samples):
-            inputs = {k:v[i] for k, v in kwargs.items()}
-            outputs = self.featurizer(**inputs)
-            featurized.append(outputs)
-            
-        if batch_size == "auto":
-            # Automatically define batch size
-            if not self.best_batch_size_defined and num_samples > self.best_batch_size:
-                self.best_batch_size = num_samples
-                while True:
-                    try:
-                        inputs = featurized[:self.best_batch_size]
-                        self.model.predict(self.collator(inputs))
-                        break
-                    except Exception as e:
-                        if isinstance(e, RuntimeError) and "out of memory" in str(e):
-                            torch.cuda.empty_cache()
-                            logging.debug(f"Reduce batch size from {self.best_batch_size} to {self.best_batch_size // 2}")
-                            self.best_batch_size = self.best_batch_size // 2
-                            self.best_batch_size_defined = True
-                        else:
-                            raise e
-            batch_size = self.best_batch_size
-        else:
-            batch_size = num_samples
-        
-        outputs = [None for i in range(num_samples)]
-        for i in tqdm(range((num_samples - 1) // batch_size + 1), desc="Inference Steps"):
-            # Generate a output text that both LLM and experts can understand
-            retry_times = 0
-            retry_idx = range(i * batch_size, (i + 1) * batch_size)
-            while retry_times < self.retry_limit and len(retry_idx) > 0:
-                inputs = [featurized[idx] for idx in retry_idx]
-                batch_output = self.model.predict(self.model.transfer_batch_to_device(self.collator(inputs), self.cfg.device, 0))
-                new_retry_idx = []
-                for j, output in enumerate(batch_output):
-                    if output is None:
-                        # Generation failure, restart
-                        new_retry_idx.append(retry_idx[j])
-                    else:
-                        outputs[i * batch_size + retry_idx[j]] = output
-                retry_idx = new_retry_idx
-                retry_times += 1
+if __name__ == "__main__":
+    pipeline = TrainValPipeline()
+    pipeline.inspect_pipeline()
 
-        # Save molecules and proteins
-        files = []
-        for i, output in enumerate(outputs):
-            timestamp = int(datetime.datetime.now().timestamp() * 1000)
-            file = ""
-            if isinstance(output, Molecule):
-                file = f"./tmp/mol_{timestamp}_{i}.pkl"
-                output.save_binary(file)
-            if isinstance(output, Protein):
-                file = f"./tmp/mol_{timestamp}_{i}.pkl"
-                output.save_binary(file)
-            if isinstance(output, Pocket):
-                file = f"./tmp/pocket_{timestamp}_{i}.pkl"
-                output.save_binary(file)
-            files.append(file)
-        return [self.output_prompt.format(output=output, **kwargs) for output in outputs], files
+# python open_biomed/test.py --task text_based_molecule_editing \
+# --additional_config_file configs/model/moleculestm.yaml --dataset_name fs_mol_edit --dataset_path ./datasets/text_based_molecule_editing/fs_mol_edit
