@@ -1,0 +1,24 @@
+model:
+  name: unname
+  hf_model_name_or_path: ./checkpoints/molt5/base
+  smiles_max_length: 256
+  text_max_length: 256
+  vocab_path: ./checkpoints/moleculestm/megamolbart/bart_vocab.txt
+  MegaMolBART_generation_model_dir: ./checkpoints/moleculestm/megamolbart/checkpoints
+  predict:
+    num_beams: 2
+    max_length: 512
+  fg_path: /data/hucp/hucp/Temp/unname-stage1/checkpoints/1/best-val-epoch=01-val_loss=0.09.ckpt
+  device: cuda
+
+dataset:
+  batch_size_train: 64
+  batch_size_eval: 64
+
+train:
+  max_epochs: 10
+  batch_size: 64
+  ckpt_freq: 2
+
+evaluation:
+  batch_size: 64

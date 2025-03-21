@@ -235,13 +235,13 @@ class TrainValPipeline(Pipeline):
     def inspect_pipeline(self) -> None:
 
         # 查看数据处理的结果
-        # batch = next(iter(self.datamodule.train_dataloader()))
-        batch = next(iter(self.datamodule.test_dataloader()))
+        batch = next(iter(self.datamodule.train_dataloader()))
+        # batch = next(iter(self.datamodule.test_dataloader()))
         # print(len(batch['molecule']))
         # print(batch)
-        # model_output = self.model.forward(batch)
-        model_output = self.model.predict(batch)
-        # print(model_output)
+        model_output = self.model.forward(batch)
+        # model_output = self.model.predict(batch)
+        print(model_output)
         # # 查看模型的中间输出
         # model_output = self.model.model(batch)
         # print("Model intermediate output:")
@@ -265,4 +265,4 @@ if __name__ == "__main__":
     pipeline.inspect_pipeline()
 
 # python open_biomed/test.py --task text_based_molecule_editing \
-# --additional_config_file configs/model/moleculestm.yaml --dataset_name fs_mol_edit --dataset_path ./datasets/text_based_molecule_editing/fs_mol_edit
+# --additional_config_file configs/model/unname.yaml --dataset_name fs_mol_edit --dataset_path ./datasets/text_based_molecule_editing/fs_mol_edit

@@ -93,7 +93,7 @@ class TrainValPipeline(Pipeline):
         # Dataset config
         parser.add_argument("--dataset_name", type=str)
         parser.add_argument("--dataset_path", type=str)
-        parser.add_argument("--num_workers", type=int, default=64)
+        parser.add_argument("--num_workers", type=int, default=32)
 
         # Train & Val params
         parser.add_argument("--batch_size_train", type=int, default=8)
